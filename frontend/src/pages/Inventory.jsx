@@ -50,14 +50,26 @@ export default function Inventory() {
     });
   }, [projectId]);
 
-  const grouped = useMemo(() => {
-    const m = {};
+  // Pre-sorted nested structure: [[tower, [[floor, [units sorted by unit_number]]]]]
+  // sorted by tower asc, floor desc, unit_number asc — so JSX iterates without extra work.
+  const groupedSorted = useMemo(() => {
+    const byTower = {};
     units.forEach((u) => {
-      m[u.tower] = m[u.tower] || {};
-      m[u.tower][u.floor] = m[u.tower][u.floor] || [];
-      m[u.tower][u.floor].push(u);
+      byTower[u.tower] = byTower[u.tower] || {};
+      byTower[u.tower][u.floor] = byTower[u.tower][u.floor] || [];
+      byTower[u.tower][u.floor].push(u);
     });
-    return m;
+    return Object.entries(byTower)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([tower, floors]) => [
+        tower,
+        Object.entries(floors)
+          .sort(([a], [b]) => parseInt(b, 10) - parseInt(a, 10))
+          .map(([floor, list]) => [
+            floor,
+            [...list].sort((a, b) => a.unit_number.localeCompare(b.unit_number)),
+          ]),
+      ]);
   }, [units]);
 
   const counts = useMemo(() => {
@@ -126,7 +138,7 @@ export default function Inventory() {
       )}
 
       <div className="space-y-8">
-        {Object.entries(grouped).sort().map(([tower, floors]) => (
+        {groupedSorted.map(([tower, floors]) => (
           <div key={tower} className="bg-white border border-[#E6E4DF] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -135,11 +147,11 @@ export default function Inventory() {
               </div>
             </div>
             <div className="space-y-2">
-              {Object.keys(floors).sort((a, b) => parseInt(b) - parseInt(a)).map((floor) => (
+              {floors.map(([floor, floorUnits]) => (
                 <div key={floor} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-2 text-xxs uppercase tracking-widest text-[#8A8782] font-mono">Floor {floor}</div>
                   <div className="col-span-10 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                    {floors[floor].sort((a, b) => a.unit_number.localeCompare(b.unit_number)).map((u) => (
+                    {floorUnits.map((u) => (
                       <button
                         key={u.id}
                         onClick={() => cycleStatus(u)}

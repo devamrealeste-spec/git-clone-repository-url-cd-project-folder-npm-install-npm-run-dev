@@ -7,8 +7,8 @@ import requests
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://agent-leads-11.preview.emergentagent.com').rstrip('/')
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@devam.com"
-ADMIN_PASS = "Admin@123"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@devam.com")
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "Admin@123")
 
 
 @pytest.fixture(scope="session")
@@ -228,12 +228,12 @@ class TestUsersRBAC:
         unique = uuid.uuid4().hex[:6]
         email = f"second_admin_{unique}@devam.com"
         r = requests.post(f"{API}/users", headers=admin_headers, json={
-            "email": email, "name": "Second Admin", "password": "Admin@123", "role": "admin"
+            "email": email, "name": "Second Admin", "password": ADMIN_PASS, "role": "admin"
         }, timeout=15)
         assert r.status_code == 200
         new_admin = r.json()
         # login as the new admin
-        login = requests.post(f"{API}/auth/login", json={"email": email, "password": "Admin@123"}, timeout=15)
+        login = requests.post(f"{API}/auth/login", json={"email": email, "password": ADMIN_PASS}, timeout=15)
         new_admin_h = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         # find seeded admin id

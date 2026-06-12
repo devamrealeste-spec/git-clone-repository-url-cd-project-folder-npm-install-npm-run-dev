@@ -1,63 +1,67 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 
 const AuthContext = createContext(null);
 
+const TOKEN_KEY = "devam_token";
+// sessionStorage clears when the tab closes — narrower XSS exfiltration window than localStorage.
+// Refresh tokens still live in an httpOnly cookie set by the backend.
+const tokenStore = {
+  get: () => sessionStorage.getItem(TOKEN_KEY),
+  set: (t) => sessionStorage.setItem(TOKEN_KEY, t),
+  clear: () => sessionStorage.removeItem(TOKEN_KEY),
+};
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null); // null = checking, false = anon, object = user
-  const [token, setToken] = useState(() => localStorage.getItem("devam_token") || null);
+  // null = checking, false = anon, object = signed-in user
+  const [user, setUser] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const { data } = await api.get("/auth/me", { headers });
-        if (mounted) setUser(data);
-      } catch {
-        if (mounted) setUser(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line
-  }, []);
-
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
-    setUser(data.user);
-    if (data.access_token) {
-      localStorage.setItem("devam_token", data.access_token);
-      setToken(data.access_token);
-    }
-    return data;
-  };
-
-  const logout = async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch {}
-    localStorage.removeItem("devam_token");
-    setToken(null);
-    setUser(false);
-  };
-
-  // Attach token to every request via interceptor
+  // Attach token to every outgoing request via a single interceptor.
   useEffect(() => {
     const id = api.interceptors.request.use((cfg) => {
-      const t = localStorage.getItem("devam_token");
+      const t = tokenStore.get();
       if (t) cfg.headers.Authorization = `Bearer ${t}`;
       return cfg;
     });
     return () => api.interceptors.request.eject(id);
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, setUser }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  // Resolve current user once on mount.
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get("/auth/me")
+      .then((res) => {
+        if (mounted) setUser(res.data);
+      })
+      .catch(() => {
+        if (mounted) setUser(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const login = useCallback(async (email, password) => {
+    const { data } = await api.post("/auth/login", { email, password });
+    if (data.access_token) tokenStore.set(data.access_token);
+    setUser(data.user);
+    return data;
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      /* network errors are non-fatal at sign-out */
+    }
+    tokenStore.clear();
+    setUser(false);
+  }, []);
+
+  const value = useMemo(() => ({ user, login, logout, setUser }), [user, login, logout]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Plus, RefreshCw, X, Sparkles, Trash2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,7 +40,7 @@ export default function Leads() {
   const [scoringId, setScoringId] = useState(null);
   const [drawerLead, setDrawerLead] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const params = {};
     if (stageFilter) params.stage = stageFilter;
@@ -48,12 +48,11 @@ export default function Leads() {
     const { data } = await api.get("/leads", { params });
     setLeads(data);
     setLoading(false);
-  };
+  }, [stageFilter, search]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line
-  }, [stageFilter]);
+  }, [stageFilter, load]);
 
   const handleRescore = async (id) => {
     setScoringId(id);

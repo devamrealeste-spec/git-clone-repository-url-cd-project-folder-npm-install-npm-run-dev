@@ -135,11 +135,11 @@ export default function Landing() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-[#E6E4DF]">
-            {MODULES.map((m, i) => (
+            {MODULES.map((m) => (
               <div
-                key={i}
+                key={m.title}
                 className="bg-[#F9F6F0] p-8 hover-lift border-0"
-                data-testid={`module-card-${i}`}
+                data-testid={`module-card-${m.title.toLowerCase().replace(/\s+/g, "-")}`}
               >
                 <m.icon className="w-7 h-7 text-[#C25934]" strokeWidth={1.5} />
                 <div className="font-display text-2xl mt-6">{m.title}</div>
@@ -169,7 +169,7 @@ export default function Landing() {
                 ["Live inventory across towers, floors and flats", "Block, release and book units with a single tap. No more double-booking."],
                 ["Built for the Gujarat real estate motion", "Hindi / Gujarati friendly, RERA-aware, NRI-payment flow ready."],
               ].map(([t, d], i) => (
-                <li key={i} className="flex gap-5">
+                <li key={t} className="flex gap-5">
                   <div className="kpi-num text-3xl text-[#C25934] w-10 shrink-0">0{i + 1}</div>
                   <div>
                     <div className="font-medium text-base">{t}</div>

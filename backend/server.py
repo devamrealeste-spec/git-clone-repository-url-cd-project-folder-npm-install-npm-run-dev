@@ -273,6 +273,46 @@ async def dashboard_stats(_=Depends(get_current_user)):
 
 
 # ---------- Leads ----------
+def _parse_ai_score_reply(reply: str) -> dict:
+    """Parse 'SCORE=<n>|CATEGORY=<x>|REASON=<r>' into a normalised dict."""
+    parts: dict = {}
+    for chunk in str(reply).strip().split("|"):
+        if "=" in chunk:
+            k, v = chunk.split("=", 1)
+            parts[k.strip()] = v.strip()
+    score = max(0, min(100, int(parts.get("SCORE", "50"))))
+    category = parts.get("CATEGORY", "Warm")
+    if category not in ("Hot", "Warm", "Cold"):
+        category = "Hot" if score >= 75 else "Warm" if score >= 40 else "Cold"
+    reason = parts.get("REASON", "Auto-scored by AI")
+    return {"score": score, "category": category, "reason": reason}
+
+
+def _fallback_rule_score(lead: dict) -> dict:
+    """Deterministic lead score used when the LLM call fails."""
+    score = 30
+    urgency = lead.get("urgency")
+    if urgency == "Immediate":
+        score += 30
+    elif urgency == "1-3 months":
+        score += 18
+
+    budget_max = lead.get("budget_max", 0) or 0
+    if budget_max >= 10_000_000:
+        score += 20
+    elif budget_max >= 5_000_000:
+        score += 12
+
+    if lead.get("source") in ("Referral", "NRI Network"):
+        score += 15
+    if lead.get("notes"):
+        score += 5
+
+    score = max(0, min(100, score))
+    category = "Hot" if score >= 75 else "Warm" if score >= 40 else "Cold"
+    return {"score": score, "category": category, "reason": "Auto-scored (rule-based)"}
+
+
 async def score_lead_with_ai(lead: dict) -> dict:
     """Score a lead using Claude via emergentintegrations. Falls back to rule-based scoring."""
     try:
@@ -298,39 +338,11 @@ async def score_lead_with_ai(lead: dict) -> dict:
             f"Urgency: {lead.get('urgency')}\n"
             f"Notes: {lead.get('notes', '')}"
         )
-        msg = UserMessage(text=prompt)
-        reply = await asyncio.wait_for(chat.send_message(msg), timeout=18)
-        # Parse
-        parts = {}
-        for chunk in str(reply).strip().split("|"):
-            if "=" in chunk:
-                k, v = chunk.split("=", 1)
-                parts[k.strip()] = v.strip()
-        score = int(parts.get("SCORE", "50"))
-        category = parts.get("CATEGORY", "Warm")
-        reason = parts.get("REASON", "Auto-scored by AI")
-        if category not in ("Hot", "Warm", "Cold"):
-            category = "Hot" if score >= 75 else "Warm" if score >= 40 else "Cold"
-        return {"score": max(0, min(100, score)), "category": category, "reason": reason}
+        reply = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=18)
+        return _parse_ai_score_reply(reply)
     except Exception as e:
         logger.warning(f"AI scoring failed, using fallback: {e}")
-        # Rule-based fallback
-        score = 30
-        if lead.get("urgency") == "Immediate":
-            score += 30
-        elif lead.get("urgency") == "1-3 months":
-            score += 18
-        if lead.get("budget_max", 0) >= 10000000:
-            score += 20
-        elif lead.get("budget_max", 0) >= 5000000:
-            score += 12
-        if lead.get("source") in ("Referral", "NRI Network"):
-            score += 15
-        if lead.get("notes"):
-            score += 5
-        score = max(0, min(100, score))
-        category = "Hot" if score >= 75 else "Warm" if score >= 40 else "Cold"
-        return {"score": score, "category": category, "reason": "Auto-scored (rule-based)"}
+        return _fallback_rule_score(lead)
 
 
 @api.get("/leads")
@@ -762,8 +774,8 @@ async def delete_user(uid: str, current=Depends(require_admin)):
 
 
 # ---------- Seed ----------
-async def seed_data():
-    # Admin user
+async def _seed_admin_user() -> None:
+    """Create (or repair) the seeded admin account based on env vars."""
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     admin_pw = os.environ["ADMIN_PASSWORD"]
     existing = await db.users.find_one({"email": admin_email})
@@ -777,17 +789,16 @@ async def seed_data():
             "created_at": now_utc().isoformat(),
         })
         logger.info(f"Seeded admin user: {admin_email}")
-    else:
-        # Keep password aligned with env in case it changed
-        if not verify_password(admin_pw, existing["password_hash"]):
-            await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pw)}})
-
-    # Skip demo seeding if already done
-    if await db.builders.count_documents({}) > 0:
         return
+    # Keep the seeded password aligned with the current env value.
+    if not verify_password(admin_pw, existing["password_hash"]):
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {"password_hash": hash_password(admin_pw)}},
+        )
 
-    logger.info("Seeding demo data...")
 
+async def _seed_builders() -> list[dict]:
     builders = [
         {"name": "Shilp Group", "contact_person": "Mehul Shah", "phone": "+91-79-2323-1100", "email": "info@shilpgroup.in", "city": "Gandhinagar", "projects_count": 12, "rating": 4.7, "notes": "Premium residential developer in GIFT City corridor"},
         {"name": "Goyal & Co.", "contact_person": "Anjali Goyal", "phone": "+91-79-2640-5500", "email": "contact@goyalco.in", "city": "Ahmedabad", "projects_count": 18, "rating": 4.6, "notes": "Established since 1971, mixed-use developer"},
@@ -798,10 +809,13 @@ async def seed_data():
         b["id"] = str(uuid.uuid4())
         b["created_at"] = now_utc().isoformat()
     await db.builders.insert_many(builders)
+    return builders
 
+
+async def _seed_projects(builders: list[dict]) -> list[dict]:
     projects = [
         {"name": "Shilp Aaria", "builder_id": builders[0]["id"], "builder_name": "Shilp Group", "city": "Gandhinagar", "location": "Sector 26, near GIFT City", "project_type": "Residential", "status": "Under Construction", "price_min": 8500000, "price_max": 18500000, "total_units": 240, "available_units": 86, "rera_number": "PR/GJ/GANDHINAGAR/050", "possession_date": "Dec 2026", "description": "3 & 4 BHK premium apartments with sky deck and lap pool.", "image_url": "https://images.unsplash.com/photo-1721815693498-cc28507c0ba2?crop=entropy&cs=srgb&fm=jpg&q=85&w=900"},
-        {"name": "Goyal Orchid Whitefield", "builder_id": builders[1]["id"], "builder_name": "Goyal & Co.", "city": "Ahmedabad", "location": "Shela, SP Ring Road", "project_type": "Residential", "status": "Ready to Move", "price_min": 6500000, "price_max": 12500000, "total_units": 380, "available_units": 42, "rating": 4.6, "rera_number": "PR/GJ/AHMEDABAD/118", "possession_date": "Ready", "description": "2 & 3 BHK with clubhouse, kids zone, and 70% open space.", "image_url": "https://images.unsplash.com/photo-1515263487990-61b07816b324?crop=entropy&cs=srgb&fm=jpg&q=85&w=900"},
+        {"name": "Goyal Orchid Whitefield", "builder_id": builders[1]["id"], "builder_name": "Goyal & Co.", "city": "Ahmedabad", "location": "Shela, SP Ring Road", "project_type": "Residential", "status": "Ready to Move", "price_min": 6500000, "price_max": 12500000, "total_units": 380, "available_units": 42, "rera_number": "PR/GJ/AHMEDABAD/118", "possession_date": "Ready", "description": "2 & 3 BHK with clubhouse, kids zone, and 70% open space.", "image_url": "https://images.unsplash.com/photo-1515263487990-61b07816b324?crop=entropy&cs=srgb&fm=jpg&q=85&w=900"},
         {"name": "Adani Shantigram Pristine", "builder_id": builders[2]["id"], "builder_name": "Adani Realty", "city": "Ahmedabad", "location": "Shantigram Township, SG Highway", "project_type": "Mixed", "status": "Pre-launch", "price_min": 9500000, "price_max": 28500000, "total_units": 520, "available_units": 520, "rera_number": "PR/GJ/AHMEDABAD/220", "possession_date": "Jun 2028", "description": "Township phase 4 — 3/4/5 BHK + retail blocks.", "image_url": "https://images.unsplash.com/photo-1721815693498-cc28507c0ba2?crop=entropy&cs=srgb&fm=jpg&q=85&w=900"},
         {"name": "Sangath Sentosa Villas", "builder_id": builders[3]["id"], "builder_name": "Sangath Lifespace", "city": "Gandhinagar", "location": "Sargasan, Ch. 3", "project_type": "Residential", "status": "Under Construction", "price_min": 35000000, "price_max": 75000000, "total_units": 48, "available_units": 19, "rera_number": "PR/GJ/GANDHINAGAR/091", "possession_date": "Sep 2026", "description": "4 & 5 BHK private villas with bespoke interiors.", "image_url": "https://images.unsplash.com/photo-1515263487990-61b07816b324?crop=entropy&cs=srgb&fm=jpg&q=85&w=900"},
     ]
@@ -809,33 +823,59 @@ async def seed_data():
         p["id"] = str(uuid.uuid4())
         p["created_at"] = now_utc().isoformat()
     await db.projects.insert_many(projects)
+    return projects
 
-    # Inventory for first project
-    inv = []
-    for tower in ["A", "B"]:
-        for floor in range(1, 11):
-            for unit in range(1, 5):
-                status = "Available"
-                if (floor + unit) % 5 == 0:
-                    status = "Booked"
-                elif (floor * unit) % 7 == 0:
-                    status = "Blocked"
-                inv.append({
-                    "id": str(uuid.uuid4()),
-                    "project_id": projects[0]["id"],
-                    "project_name": projects[0]["name"],
-                    "tower": tower,
-                    "floor": floor,
-                    "unit_number": f"{tower}-{floor}0{unit}",
-                    "unit_type": "3BHK" if unit <= 2 else "4BHK",
-                    "carpet_area": 1450 if unit <= 2 else 2150,
-                    "price": 12500000 if unit <= 2 else 18500000,
-                    "status": status,
-                    "created_at": now_utc().isoformat(),
-                })
+
+def _build_seed_unit(project: dict, tower: str, floor: int, unit_idx: int) -> dict:
+    """Generate a single inventory unit doc with a deterministic status pattern."""
+    if (floor + unit_idx) % 5 == 0:
+        status = "Booked"
+    elif (floor * unit_idx) % 7 == 0:
+        status = "Blocked"
+    else:
+        status = "Available"
+    is_smaller = unit_idx <= 2
+    return {
+        "id": str(uuid.uuid4()),
+        "project_id": project["id"],
+        "project_name": project["name"],
+        "tower": tower,
+        "floor": floor,
+        "unit_number": f"{tower}-{floor}0{unit_idx}",
+        "unit_type": "3BHK" if is_smaller else "4BHK",
+        "carpet_area": 1450 if is_smaller else 2150,
+        "price": 12500000 if is_smaller else 18500000,
+        "status": status,
+        "created_at": now_utc().isoformat(),
+    }
+
+
+async def _seed_inventory(project: dict) -> None:
+    inv = [
+        _build_seed_unit(project, tower, floor, unit_idx)
+        for tower in ("A", "B")
+        for floor in range(1, 11)
+        for unit_idx in range(1, 5)
+    ]
     await db.inventory.insert_many(inv)
 
-    # Demo leads
+
+def _hydrate_seed_lead(lead: dict) -> dict:
+    """Decorate a seed lead with timestamps and rule-based AI score."""
+    lead["id"] = str(uuid.uuid4())
+    lead["created_at"] = now_utc().isoformat()
+    lead["updated_at"] = lead["created_at"]
+    lead["assigned_to"] = "Devam Admin"
+    scored = _fallback_rule_score(lead)
+    lead.update({
+        "score": scored["score"],
+        "score_category": scored["category"],
+        "score_reason": "Seeded — rule-based",
+    })
+    return lead
+
+
+async def _seed_leads(projects: list[dict]) -> list[dict]:
     demo_leads = [
         {"name": "Rakesh Pandya", "phone": "+91-98250-12345", "email": "rakesh.p@gmail.com", "source": "Referral", "budget_min": 8000000, "budget_max": 12000000, "location": "Gandhinagar Sector 26", "property_type": "Apartment", "urgency": "Immediate", "notes": "Looking for 3BHK near GIFT City, ready to book in 2 weeks. Pre-approved home loan.", "stage": "Negotiation", "project_id": projects[0]["id"]},
         {"name": "Dr. Hetal Mehta", "phone": "+91-94260-78900", "email": "dr.hetal@yahoo.com", "source": "NRI Network", "budget_min": 25000000, "budget_max": 40000000, "location": "Sargasan", "property_type": "Villa", "urgency": "1-3 months", "notes": "NRI from London. Wants premium villa with private garden. Will visit India in March.", "stage": "Site Visit", "project_id": projects[3]["id"]},
@@ -846,49 +886,54 @@ async def seed_data():
         {"name": "Vihaan Goswami", "phone": "+91-93760-11199", "email": "vihaan@gmail.com", "source": "Instagram", "budget_min": 6000000, "budget_max": 8000000, "location": "Shela", "property_type": "Apartment", "urgency": "Immediate", "notes": "Saw the reel, called immediately. Wants 2BHK ready possession.", "stage": "Contacted", "project_id": projects[1]["id"]},
         {"name": "Asha Parekh", "phone": "+91-93770-88822", "email": "asha.parekh@gmail.com", "source": "Referral", "budget_min": 15000000, "budget_max": 25000000, "location": "Sargasan villa zone", "property_type": "Villa", "urgency": "3-6 months", "notes": "Referred by Dr. Mehta. Spouse joins decision-making.", "stage": "New", "project_id": projects[3]["id"]},
     ]
-    for ld in demo_leads:
-        ld["id"] = str(uuid.uuid4())
-        ld["created_at"] = now_utc().isoformat()
-        ld["updated_at"] = ld["created_at"]
-        ld["assigned_to"] = "Devam Admin"
-        ld["lead_name"] = ld["name"]
-        # Use rule-based scoring for the seed (avoid hitting LLM during boot)
-        score = 30
-        if ld.get("urgency") == "Immediate":
-            score += 30
-        elif ld.get("urgency") == "1-3 months":
-            score += 18
-        if ld.get("budget_max", 0) >= 10000000:
-            score += 20
-        elif ld.get("budget_max", 0) >= 5000000:
-            score += 12
-        if ld.get("source") in ("Referral", "NRI Network"):
-            score += 15
-        if ld.get("notes"):
-            score += 5
-        score = max(0, min(100, score))
-        ld["score"] = score
-        ld["score_category"] = "Hot" if score >= 75 else "Warm" if score >= 40 else "Cold"
-        ld["score_reason"] = "Seeded — rule-based"
+    demo_leads = [_hydrate_seed_lead(ld) for ld in demo_leads]
     await db.leads.insert_many(demo_leads)
+    return demo_leads
 
-    # Site visits
+
+async def _seed_visits(leads: list[dict], projects: list[dict]) -> None:
     visits = [
-        {"lead_id": demo_leads[0]["id"], "lead_name": demo_leads[0]["name"], "project_id": projects[0]["id"], "project_name": projects[0]["name"], "scheduled_at": (now_utc() + timedelta(days=2)).isoformat(), "assigned_agent": "Riya Patel", "status": "Scheduled", "feedback": ""},
-        {"lead_id": demo_leads[1]["id"], "lead_name": demo_leads[1]["name"], "project_id": projects[3]["id"], "project_name": projects[3]["name"], "scheduled_at": (now_utc() + timedelta(days=5)).isoformat(), "assigned_agent": "Karan Joshi", "status": "Scheduled", "feedback": ""},
-        {"lead_id": demo_leads[5]["id"], "lead_name": demo_leads[5]["name"], "project_id": projects[0]["id"], "project_name": projects[0]["name"], "scheduled_at": (now_utc() - timedelta(days=1)).isoformat(), "assigned_agent": "Riya Patel", "status": "Completed", "feedback": "Liked the 3BHK in tower B. Will discuss with family."},
+        {"lead_id": leads[0]["id"], "lead_name": leads[0]["name"], "project_id": projects[0]["id"], "project_name": projects[0]["name"], "scheduled_at": (now_utc() + timedelta(days=2)).isoformat(), "assigned_agent": "Riya Patel", "status": "Scheduled", "feedback": ""},
+        {"lead_id": leads[1]["id"], "lead_name": leads[1]["name"], "project_id": projects[3]["id"], "project_name": projects[3]["name"], "scheduled_at": (now_utc() + timedelta(days=5)).isoformat(), "assigned_agent": "Karan Joshi", "status": "Scheduled", "feedback": ""},
+        {"lead_id": leads[5]["id"], "lead_name": leads[5]["name"], "project_id": projects[0]["id"], "project_name": projects[0]["name"], "scheduled_at": (now_utc() - timedelta(days=1)).isoformat(), "assigned_agent": "Riya Patel", "status": "Completed", "feedback": "Liked the 3BHK in tower B. Will discuss with family."},
     ]
     for v in visits:
         v["id"] = str(uuid.uuid4())
         v["created_at"] = now_utc().isoformat()
     await db.site_visits.insert_many(visits)
 
-    # Bookings
-    bookings = [
-        {"id": str(uuid.uuid4()), "lead_id": demo_leads[0]["id"], "lead_name": demo_leads[0]["name"], "project_id": projects[0]["id"], "project_name": projects[0]["name"], "unit_number": "A-501", "booking_amount": 500000, "total_value": 11800000, "booking_date": (now_utc() - timedelta(days=3)).isoformat(), "status": "Token", "created_at": now_utc().isoformat()},
-    ]
+
+async def _seed_bookings(leads: list[dict], projects: list[dict]) -> None:
+    bookings = [{
+        "id": str(uuid.uuid4()),
+        "lead_id": leads[0]["id"],
+        "lead_name": leads[0]["name"],
+        "project_id": projects[0]["id"],
+        "project_name": projects[0]["name"],
+        "unit_number": "A-501",
+        "booking_amount": 500000,
+        "total_value": 11800000,
+        "booking_date": (now_utc() - timedelta(days=3)).isoformat(),
+        "status": "Token",
+        "created_at": now_utc().isoformat(),
+    }]
     await db.bookings.insert_many(bookings)
 
+
+async def seed_data() -> None:
+    """Top-level seed orchestrator. Idempotent on the admin user; demo data only seeds on empty DB."""
+    await _seed_admin_user()
+
+    if await db.builders.count_documents({}) > 0:
+        return
+
+    logger.info("Seeding demo data...")
+    builders = await _seed_builders()
+    projects = await _seed_projects(builders)
+    await _seed_inventory(projects[0])
+    leads = await _seed_leads(projects)
+    await _seed_visits(leads, projects)
+    await _seed_bookings(leads, projects)
     logger.info("Demo data seeded.")
 
 

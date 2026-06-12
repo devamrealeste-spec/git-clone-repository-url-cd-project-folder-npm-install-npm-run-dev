@@ -33,10 +33,15 @@ export default function LeadDetailDrawer({ lead, onClose, onLeadUpdated }) {
 
   useEffect(() => {
     if (!lead) return;
+    let mounted = true;
     api.get(`/leads/${lead.id}/activities`).then((r) => {
+      if (!mounted) return;
       setActivities(r.data);
       setLoading(false);
     });
+    return () => {
+      mounted = false;
+    };
   }, [lead]);
 
   if (!lead) return null;

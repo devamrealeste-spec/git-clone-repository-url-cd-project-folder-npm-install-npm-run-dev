@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutGrid,
@@ -30,6 +31,11 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const role = user?.role;
+  const visibleNav = useMemo(
+    () => NAV.filter((n) => !n.adminOnly || role === "admin"),
+    [role],
+  );
   const current = NAV.find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)));
 
   const handleLogout = async () => {
@@ -52,7 +58,7 @@ export default function DashboardLayout() {
 
         <nav className="flex-1 py-4">
           <div className="px-5 text-xxs uppercase tracking-widest text-[#8A8782] mb-2">Workspace</div>
-          {NAV.filter((n) => !n.adminOnly || user?.role === "admin").map((n) => (
+          {visibleNav.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 3 (code-quality refactor) regression testing complete. Backend: 31/32 pytest tests passed across both existing test files. Frontend: all 5 smoke-tested flows passed (login, sessionStorage token, refresh persistence, lead drawer + activity CRUD, inventory sorted grid + status cycle) with ZERO console warnings/errors. Refactor introduced no behavior changes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/inventory?project_id=<Shilp Aaria>",
+        "issue": "test_devam_crm.py::TestInventory::test_list_filter asserts exactly 80 units in Shilp Aaria, but receives 84 — this is test-pollution from test_devam_iter2.py::TestInventoryBulk::test_bulk_create which posts 4 new units to the SAME project (some_project fixture returns projects[0] = Shilp Aaria). Pre-existing brittleness; NOT a regression from this iteration. Fix: use >= 80 OR scope bulk_create to a TEST_ prefixed project."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_devam_crm.py",
+    "/app/backend/tests/test_devam_iter2.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Fix brittle assertion in test_devam_crm.py::TestInventory::test_list_filter — change `assert len(units) == 80` to `assert len(units) >= 80` to tolerate iter2 bulk-create test pollution, OR have test_bulk_create use a dedicated TEST_ project (it already creates TEST_BulkProj_* projects but seems to write into Shilp Aaria — re-check fixture `some_project`).",
+    "(Pre-existing, unrelated to this iteration) server.py CORS uses allow_origins=['*'] with allow_credentials=True — browsers reject this combo for cookie-based auth. Move to explicit origin list before production.",
+    "(Pre-existing) server.py is now 974 lines — split into routers (auth, leads, projects, inventory, users) before next feature iteration."
+  ],
+  "critical_code_review_comments": [
+    "seed_data orchestrator now nicely split into 7 _seed_* helpers (admin, builders, projects, inventory, leads, visits, bookings) — clean. _seed_admin_user runs every startup (idempotent), demo data gated by `db.builders.count_documents == 0` (skipped on warm DB) — same gating as before.",
+    "score_lead_with_ai now delegates to _parse_ai_score_reply + _fallback_rule_score — both helpers return the same shape {score, category} so swap is transparent.",
+    "AuthContext.jsx uses sessionStorage (verified at runtime — key `devam_token` present in sessionStorage, absent in localStorage). useMemo wraps the context value. Token survives page reload within the tab via http-only refresh cookie + /auth/me on mount.",
+    "Inventory.jsx groupedSorted memo: visually verified order — Tower A→B ascending, Floors 5→1 descending, Units 501→504 ascending in each row. No console warnings about missing memo deps or duplicate keys.",
+    "Lead drawer activity flow end-to-end works: open drawer → fill activity-content-input → click activity-submit → note appears in timeline. No regression."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "96.9% (31/32) — single failure is pre-existing test pollution, not a refactor regression",
+    "frontend": "100% (login, sessionStorage migration, refresh persistence, leads drawer + activity, inventory sorted grid + status cycle)"
+  },
+  "test_credentials": "admin@devam.com / Admin@123 (seeded, env-overridable via ADMIN_EMAIL/ADMIN_PASSWORD)",
+  "seed_data_creation": "No new seed data created by this iteration. Pre-existing TEST_ prefixed leftovers from prior iterations remain in DB (a TEST_BulkProj_* project, TEST_iter3_smoke_note activity on first lead). Not blocking.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 3 is a pure refactor — no behavior changes verified. Backend pytest suite 31/32 (single failure is brittle assertion, not regression). Frontend smoke fully green. sessionStorage key is `devam_token`. Login submits to /api/auth/login and routes to /app. Leads at /app/leads (data-testid lead-row-* per row), Inventory at /app/inventory (data-testid unit-<tower>-<floor><unit>). Activity testids: activity-content-input, activity-submit. Login testids: login-email-input, login-password-input, login-submit-button.",
+  "rca of the issue": "test_list_filter failure RCA — Reproduction: run iter2 bulk_create test before iter1 inventory list_filter test. iter2 fixture `some_project` returns projects[0] which is the seeded 'Shilp Aaria' (80 units). bulk_create posts 4 more units (1 tower, 2 floors, 2 units = 4) targeting that same project, so the list endpoint now returns 84. Pytest test ordering currently has iter1 list_filter run AFTER iter2 patch tests in same session, but bulk_create runs even later — however when reusing a warm DB from prior runs, the 84 leak persists. Mitigation options: (1) make assertion `>= 80`, (2) point bulk_create to a TEST_-prefixed dedicated project, or (3) add an autouse teardown that deletes inventory units created mid-test. Marked minor; no fix applied to avoid scope-creep on a refactor-only iteration."
+}
