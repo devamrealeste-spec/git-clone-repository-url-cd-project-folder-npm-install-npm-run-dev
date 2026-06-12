@@ -41,8 +41,12 @@ export function AuthProvider({ children }) {
     try {
       await api.post("/auth/logout");
     } catch (err) {
-      // Network failure at sign-out is non-fatal — surface for ops visibility, then clear local state.
-      console.warn("Logout request failed (clearing local session anyway):", err?.message || err);
+      // Network failure at sign-out is non-fatal — log only in development
+      // so ops have visibility locally without leaking noise to production users.
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn("Logout request failed (clearing local session anyway):", err?.message || err);
+      }
     }
     setUser(false);
   }, []);
