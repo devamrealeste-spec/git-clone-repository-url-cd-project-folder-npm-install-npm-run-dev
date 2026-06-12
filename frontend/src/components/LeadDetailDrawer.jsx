@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { X, Send, Trash2, Phone, MessageCircle, Mail, Users as UsersIcon, Calendar, Edit } from "lucide-react";
+import { X, Send, Trash2, Phone, MessageCircle, Mail, Users as UsersIcon, Edit } from "lucide-react";
 import { toast } from "sonner";
 
 const TYPES = [
