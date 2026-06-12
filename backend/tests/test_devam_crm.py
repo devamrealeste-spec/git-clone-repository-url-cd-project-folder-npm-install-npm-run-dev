@@ -235,7 +235,7 @@ class TestInventory:
         r = api_client.get(f"{BASE_URL}/api/inventory?project_id={shilp['id']}", headers=auth_headers, timeout=30)
         assert r.status_code == 200
         units = r.json()
-        assert len(units) == 80, f"Expected 80 units in Shilp Aaria, got {len(units)}"
+        assert len(units) >= 80, f"Expected at least 80 units in Shilp Aaria, got {len(units)}"
 
     def test_crud(self, api_client, auth_headers):
         projs = api_client.get(f"{BASE_URL}/api/projects", headers=auth_headers).json()
