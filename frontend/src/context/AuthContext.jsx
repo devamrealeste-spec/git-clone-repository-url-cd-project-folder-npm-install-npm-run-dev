@@ -3,30 +3,18 @@ import api from "@/lib/api";
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = "devam_token";
-// sessionStorage clears when the tab closes — narrower XSS exfiltration window than localStorage.
-// Refresh tokens still live in an httpOnly cookie set by the backend.
-const tokenStore = {
-  get: () => sessionStorage.getItem(TOKEN_KEY),
-  set: (t) => sessionStorage.setItem(TOKEN_KEY, t),
-  clear: () => sessionStorage.removeItem(TOKEN_KEY),
-};
+// Auth is fully cookie-based. The backend sets two httpOnly cookies:
+//   - access_token  (SameSite=None; Secure; 12h)
+//   - refresh_token (SameSite=None; Secure; 7d)
+// Because they are httpOnly, JavaScript cannot read them — that closes the
+// XSS-token-theft hole that the previous localStorage / sessionStorage flow had.
+// We rely on axios `withCredentials: true` (set in lib/api.js) to send them.
 
 export function AuthProvider({ children }) {
   // null = checking, false = anon, object = signed-in user
   const [user, setUser] = useState(null);
 
-  // Attach token to every outgoing request via a single interceptor.
-  useEffect(() => {
-    const id = api.interceptors.request.use((cfg) => {
-      const t = tokenStore.get();
-      if (t) cfg.headers.Authorization = `Bearer ${t}`;
-      return cfg;
-    });
-    return () => api.interceptors.request.eject(id);
-  }, []);
-
-  // Resolve current user once on mount.
+  // Resolve current user once on mount via the auth cookie.
   useEffect(() => {
     let mounted = true;
     api
@@ -44,7 +32,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
-    if (data.access_token) tokenStore.set(data.access_token);
+    // Cookie is set by the response; we only need the returned user object.
     setUser(data.user);
     return data;
   }, []);
@@ -52,10 +40,10 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } catch {
-      /* network errors are non-fatal at sign-out */
+    } catch (err) {
+      // Network failure at sign-out is non-fatal — surface for ops visibility, then clear local state.
+      console.warn("Logout request failed (clearing local session anyway):", err?.message || err);
     }
-    tokenStore.clear();
     setUser(false);
   }, []);
 

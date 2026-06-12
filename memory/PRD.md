@@ -55,6 +55,15 @@ apply a code-quality review pass.
 - ✅ Public lead-capture micro-site
 - ✅ 16/16 iter-2 tests pass
 
+### Iteration 4 — Code Quality Pass 2 (2026-06-12)
+- ✅ **Auth fully cookie-based** — removed all `sessionStorage` / `localStorage` token storage on the frontend. JS now has **zero access** to the JWT (httpOnly + Secure + SameSite=None cookies do the work). Closes the XSS-token-theft vector entirely. Verified at runtime: both web-storage areas empty after login; session survives page reload via cookie alone.
+- ✅ **AuthContext logout** no longer silently swallows errors — surfaces them via `console.warn` so ops can see failed network calls during sign-out.
+- ℹ️ Several other review findings were investigated and confirmed as **false positives**:
+  - `server.py:848` "undefined `status`": `_build_seed_unit` has explicit `if/elif/else` so `status` is defined on every code path.
+  - `is` vs `==` complaints (server.py lines 384/517/549/590/685/747/749 + both test files): every flagged line uses idiomatic `is None` / `is not None` / `is True`, which is PEP 8 recommended and correct.
+  - "Missing hook deps" (`api`, `data`, `r`, `params`, `cfg`, etc.): `api` is a module-level import (never a dependency); the others are block-scoped locals inside the callback, not closed-over outer state.
+  - "Complexity / function-length" comments are stylistic — the code is tested, working, and the components are self-contained. Will revisit when the next feature touches those files.
+
 ### Iteration 3 — Code Quality Pass (2026-06-12)
 - ✅ **Security**: tests now read `ADMIN_EMAIL` / `ADMIN_PASSWORD` from env vars (no hardcoded creds).
 - ✅ **Security**: frontend token migrated `localStorage` → **`sessionStorage`** (narrower XSS exfiltration window). Refresh token stays in http-only cookie.
