@@ -1,0 +1,137 @@
+{
+  "theme_and_archetype": {
+    "domain": "Real Estate CRM & ERP",
+    "theme": "LIGHT",
+    "archetype": "1 (Organic & Earthy) mixed with Swiss Grid Structural Density",
+    "vibe": "Trusted, structured, warm luxury, enterprise-grade, grounded in Gujarat context. No generic tech-blue or purple."
+  },
+  "colors": {
+    "background": {
+      "base": "#F9F6F0",
+      "dashboard_bg": "#F4F3EE",
+      "card_surface": "#FFFFFF",
+      "glass_surface": "rgba(255, 255, 255, 0.85)"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#5C5A55",
+      "muted": "#8A8782",
+      "inverse": "#F9F6F0"
+    },
+    "brand": {
+      "primary": "#C25934",
+      "primary_hover": "#A64A2A",
+      "primary_light": "rgba(194, 89, 52, 0.1)"
+    },
+    "status": {
+      "hot": "#D9423E",
+      "warm": "#D97B29",
+      "cold": "#3E7B7A",
+      "success": "#3E7B7A",
+      "warning": "#D97B29"
+    },
+    "borders": {
+      "default": "#E6E4DF",
+      "focus": "#C25934"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cabinet Grotesk, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "IBM Plex Mono, monospace"
+    },
+    "scales": {
+      "h1": "text-5xl sm:text-6xl font-medium tracking-tight leading-none",
+      "h2": "text-3xl sm:text-4xl font-medium tracking-tight leading-tight",
+      "h3": "text-xl sm:text-2xl font-medium tracking-tight",
+      "h4": "text-lg font-medium",
+      "body": "text-sm sm:text-base leading-relaxed text-[#5C5A55]",
+      "small_label": "text-xs font-semibold uppercase tracking-[0.15em] text-[#8A8782]"
+    }
+  },
+  "layout_and_spacing": {
+    "marketing": {
+      "container": "max-w-7xl mx-auto px-6 lg:px-12",
+      "section_spacing": "py-24 sm:py-32",
+      "grid": "grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12"
+    },
+    "dashboard": {
+      "sidebar_width": "w-64",
+      "topbar_height": "h-16",
+      "content_padding": "p-6 sm:p-8",
+      "grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6",
+      "bento_spans": {
+        "kpi_card": "col-span-1",
+        "main_chart": "col-span-1 md:col-span-2 lg:col-span-3",
+        "side_feed": "col-span-1 row-span-2"
+      }
+    },
+    "surfaces": {
+      "card_flat": "bg-white border border-[#E6E4DF] rounded-md shadow-sm",
+      "card_glass": "backdrop-blur-xl bg-white/80 border border-white/40 shadow-sm",
+      "hover_lift": "transition-transform duration-300 hover:-translate-y-1 hover:shadow-md hover:border-[#C25934]/30"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#C25934] text-white hover:bg-[#A64A2A] px-6 py-2.5 rounded-none sm:rounded-sm text-sm font-medium transition-colors",
+      "secondary": "bg-transparent border border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-[#F9F6F0] px-6 py-2.5 rounded-none sm:rounded-sm text-sm font-medium transition-colors",
+      "ghost": "bg-transparent text-[#5C5A55] hover:bg-[#F0EFEA] hover:text-[#1A1A1A] px-4 py-2 rounded-sm text-sm transition-colors"
+    },
+    "inputs": {
+      "default": "bg-white border border-[#E6E4DF] text-[#1A1A1A] px-4 py-2.5 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#C25934] focus:border-[#C25934] text-sm"
+    },
+    "badges": {
+      "hot": "bg-[#D9423E]/10 text-[#D9423E] border border-[#D9423E]/20 px-2 py-0.5 rounded-full text-xs font-medium",
+      "warm": "bg-[#D97B29]/10 text-[#D97B29] border border-[#D97B29]/20 px-2 py-0.5 rounded-full text-xs font-medium",
+      "cold": "bg-[#3E7B7A]/10 text-[#3E7B7A] border border-[#3E7B7A]/20 px-2 py-0.5 rounded-full text-xs font-medium"
+    },
+    "tables": {
+      "container": "w-full text-left border-collapse",
+      "header": "border-b border-[#E6E4DF] text-xs font-semibold uppercase tracking-wider text-[#8A8782] pb-3",
+      "row": "border-b border-[#E6E4DF] hover:bg-[#F4F3EE]/50 transition-colors",
+      "cell": "py-4 pr-4 text-sm text-[#1A1A1A]"
+    }
+  },
+  "media": {
+    "images": {
+      "hero_marketing": {
+        "url": "https://images.unsplash.com/photo-1721815693498-cc28507c0ba2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjByZXNpZGVudGlhbCUyMGJ1aWxkaW5nJTIwYXJjaGl0ZWN0dXJlJTIwZXh0ZXJpb3J8ZW58MHx8fHwxNzgxMjUzMTAwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "High-end two-story house with glass windows and balconies, warm tone"
+      },
+      "texture_background": {
+        "url": "https://images.unsplash.com/photo-1700933401617-d03a143578d8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxnYW5kaGluYWdhciUyMGd1amFyYXQlMjBsYW5kbWFya3MlMjBhcmNoaXRlY3R1cmV8ZW58MHx8fHwxNzgxMjUzMTAwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Gandhinagar stone carvings (use at 5-10% opacity as a texture background in marketing section)"
+      },
+      "login_side_image": {
+        "url": "https://images.unsplash.com/photo-1515263487990-61b07816b324?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjByZXNpZGVudGlhbCUyMGJ1aWxkaW5nJTIwYXJjaGl0ZWN0dXJlJTIwZXh0ZXJpb3J8ZW58MHx8fHwxNzgxMjUzMTAwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract low-angle photography of a modern concrete building"
+      },
+      "client_meeting": {
+        "url": "https://images.unsplash.com/photo-1549923746-c502d488b3ea?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwyfHxyZWFsJTIwZXN0YXRlJTIwcHJvZmVzc2lvbmFsJTIwdGFsa2luZyUyMHRvJTIwY2xpZW50fGVufDB8fHx8MTc4MTI1MzEwMHww&ixlib=rb-4.1.0&q=85",
+        "description": "Real estate professionals shaking hands with client"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "stroke_width": "1.5",
+      "usage": "Use icons sparingly. Use them primarily in the dashboard sidebar, stat cards, and as micro-indicators in the data table."
+    }
+  },
+  "motion_and_interactions": {
+    "page_transition": "opacity 0.3s ease",
+    "hover_state": "All interactive elements must shift visually. Buttons change background color, cards lift slightly (-translate-y-1) and gain subtle border emphasis.",
+    "reduced_motion": "Ensure all animations respect prefers-reduced-motion media query.",
+    "dashboard_charts": "Charts should fade in gently. No bouncy animations. Keep it strictly professional."
+  },
+  "instructions_to_main_agent": [
+    "Install the required fonts via Google Fonts in index.html: <link href=\"https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap\" rel=\"stylesheet\">",
+    "Use raw HTML/Tailwind for the Marketing and Login pages to ensure bespoke layouts. Use Shadcn extensively for the Dashboard (Tables, Cards, Dropdowns).",
+    "Ensure the Dashboard is data-dense. Don't add excessive padding inside widgets. Use the 1px border approach ('border-[#E6E4DF]') instead of heavy drop shadows.",
+    "The primary accent color is Terracotta (#C25934). Use it for primary CTA buttons, active states, and focus rings. Do NOT use standard Tailwind blue, indigo, or purple anywhere.",
+    "For the Leads table, implement the AI Lead Score badges exactly as defined in the colors.status section.",
+    "All interactive elements MUST have role-based data-testid attributes (e.g., data-testid=\"login-submit-button\", data-testid=\"nav-dashboard-link\").",
+    "Marketing Hero Overlay: If layering text over the hero image, use a gradient overlay (bg-gradient-to-r from-[#F9F6F0] via-[#F9F6F0]/80 to-transparent) rather than a flat black box to maintain the light theme."
+  ]
+}
