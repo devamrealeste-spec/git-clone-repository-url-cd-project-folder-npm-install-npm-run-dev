@@ -10,6 +10,8 @@ import Builders from "@/pages/Builders";
 import SiteVisits from "@/pages/SiteVisits";
 import Bookings from "@/pages/Bookings";
 import Inventory from "@/pages/Inventory";
+import Users from "@/pages/Users";
+import PublicCapture from "@/pages/PublicCapture";
 import { Toaster } from "sonner";
 
 function Protected({ children }) {
@@ -33,6 +35,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/capture" element={<PublicCapture />} />
+          <Route path="/capture/:projectId" element={<PublicCapture />} />
           <Route
             path="/app"
             element={
@@ -48,6 +52,7 @@ function App() {
             <Route path="site-visits" element={<SiteVisits />} />
             <Route path="bookings" element={<Bookings />} />
             <Route path="inventory" element={<Inventory />} />
+            <Route path="users" element={<Users />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

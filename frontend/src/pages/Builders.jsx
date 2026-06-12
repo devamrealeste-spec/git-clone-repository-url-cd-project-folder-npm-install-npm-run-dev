@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Plus, X, Trash2, Star } from "lucide-react";
+import { Plus, X, Trash2, Star, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 
 const inputCls = "w-full bg-white border border-[#E6E4DF] px-3 py-2.5 text-sm focus:outline-none focus:border-[#C25934] focus:ring-1 focus:ring-[#C25934]";
@@ -9,6 +9,7 @@ export default function Builders() {
   const [builders, setBuilders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   const load = async () => {
     const { data } = await api.get("/builders");
@@ -32,7 +33,7 @@ export default function Builders() {
           <h1 className="font-display text-4xl font-medium mt-2 leading-none">Builder Directory</h1>
           <p className="text-[#5C5A55] mt-2 text-sm">Partner builders shaping Gujarat's skyline.</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 bg-[#C25934] hover:bg-[#A64A2A] text-white px-5 py-2.5 text-sm font-medium" data-testid="add-builder-button">
+        <button onClick={() => setEditing("new")} className="inline-flex items-center gap-2 bg-[#C25934] hover:bg-[#A64A2A] text-white px-5 py-2.5 text-sm font-medium" data-testid="add-builder-button">
           <Plus className="w-4 h-4" /> New Builder
         </button>
       </div>
@@ -72,9 +73,14 @@ export default function Builders() {
                   </div>
                 </td>
                 <td className="py-4 px-5 text-right">
-                  <button onClick={() => handleDelete(b.id)} className="text-[#5C5A55] hover:text-[#D9423E]" data-testid={`builder-delete-${b.id}`}>
-                    <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-                  </button>
+                  <div className="inline-flex items-center gap-1">
+                    <button onClick={() => setEditing(b)} className="text-[#5C5A55] hover:text-[#C25934] p-1" data-testid={`builder-edit-${b.id}`}>
+                      <Edit2 className="w-4 h-4" strokeWidth={1.5} />
+                    </button>
+                    <button onClick={() => handleDelete(b.id)} className="text-[#5C5A55] hover:text-[#D9423E] p-1" data-testid={`builder-delete-${b.id}`}>
+                      <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -85,13 +91,15 @@ export default function Builders() {
         </table>
       </div>
 
-      {showForm && (
+      {editing && (
         <BuilderForm
-          onClose={() => setShowForm(false)}
-          onCreated={(b) => {
-            setBuilders((prev) => [b, ...prev]);
-            setShowForm(false);
-            toast.success("Builder added");
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={(b, isNew) => {
+            if (isNew) setBuilders((prev) => [b, ...prev]);
+            else setBuilders((prev) => prev.map((x) => (x.id === b.id ? b : x)));
+            setEditing(null);
+            toast.success(isNew ? "Builder added" : "Builder updated");
           }}
         />
       )}
@@ -99,16 +107,31 @@ export default function Builders() {
   );
 }
 
-function BuilderForm({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: "", contact_person: "", phone: "", email: "", city: "Gandhinagar", projects_count: 0, rating: 4.5, notes: "" });
+function BuilderForm({ initial, onClose, onSaved }) {
+  const isEdit = !!initial;
+  const [form, setForm] = useState({
+    name: initial?.name || "",
+    contact_person: initial?.contact_person || "",
+    phone: initial?.phone || "",
+    email: initial?.email || "",
+    city: initial?.city || "Gandhinagar",
+    projects_count: initial?.projects_count ?? 0,
+    rating: initial?.rating ?? 4.5,
+    notes: initial?.notes || "",
+  });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
     e.preventDefault();
     try {
       const payload = { ...form, projects_count: parseInt(form.projects_count) || 0, rating: parseFloat(form.rating) || 0 };
-      const { data } = await api.post("/builders", payload);
-      onCreated(data);
+      if (isEdit) {
+        const { data } = await api.patch(`/builders/${initial.id}`, payload);
+        onSaved(data, false);
+      } else {
+        const { data } = await api.post("/builders", payload);
+        onSaved(data, true);
+      }
     } catch {
       toast.error("Could not save");
     }
@@ -118,7 +141,7 @@ function BuilderForm({ onClose, onCreated }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A1A]/40 backdrop-blur-sm p-4">
       <div className="bg-[#F9F6F0] border border-[#E6E4DF] w-full max-w-xl">
         <div className="px-6 py-4 border-b border-[#E6E4DF] flex items-center justify-between">
-          <div className="font-display text-2xl">New Builder</div>
+          <div className="font-display text-2xl">{isEdit ? "Edit Builder" : "New Builder"}</div>
           <button onClick={onClose} className="p-2"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={submit} className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -148,7 +171,7 @@ function BuilderForm({ onClose, onCreated }) {
           </Field>
           <div className="sm:col-span-2 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm border border-[#E6E4DF]">Cancel</button>
-            <button type="submit" className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white" data-testid="builder-form-submit">Save</button>
+            <button type="submit" className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white" data-testid="builder-form-submit">{isEdit ? "Save changes" : "Save"}</button>
           </div>
         </form>
       </div>

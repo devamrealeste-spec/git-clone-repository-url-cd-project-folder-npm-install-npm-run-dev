@@ -8,6 +8,7 @@ import {
   Calendar,
   ClipboardList,
   Boxes,
+  UserCog,
   LogOut,
   Search,
   Bell,
@@ -22,6 +23,7 @@ const NAV = [
   { to: "/app/site-visits", icon: Calendar, label: "Site Visits", testid: "nav-site-visits" },
   { to: "/app/bookings", icon: ClipboardList, label: "Bookings", testid: "nav-bookings" },
   { to: "/app/inventory", icon: Boxes, label: "Inventory", testid: "nav-inventory" },
+  { to: "/app/users", icon: UserCog, label: "Team", testid: "nav-users", adminOnly: true },
 ];
 
 export default function DashboardLayout() {
@@ -50,7 +52,7 @@ export default function DashboardLayout() {
 
         <nav className="flex-1 py-4">
           <div className="px-5 text-xxs uppercase tracking-widest text-[#8A8782] mb-2">Workspace</div>
-          {NAV.map((n) => (
+          {NAV.filter((n) => !n.adminOnly || user?.role === "admin").map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

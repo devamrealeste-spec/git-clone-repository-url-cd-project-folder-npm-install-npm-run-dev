@@ -1,0 +1,49 @@
+{
+  "summary": "DEVAM CRM iteration 2 — tested all 5 new features (edit-in-place, lead drawer + activity timeline, inventory bulk-generator, RBAC users CRUD, public capture page) + regression. Backend: 16/16 pytest tests passed. Frontend: All flows passed after fixing 1 critical missing-useState bug in Projects.jsx / Builders.jsx (broke edit-in-place entirely).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Projects.jsx & Builders.jsx",
+        "issue": "ReferenceError: 'editing' is not defined — both pages used `editing`/`setEditing` but never declared the state. Pages were completely broken (white-screen runtime error). FIXED by testing agent: added `const [editing, setEditing] = useState(null);` in both files.",
+        "selector": "page /app/projects and /app/builders",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_devam_iter2.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "Review the missing-useState fix applied by tester in Projects.jsx and Builders.jsx — verify code-style consistency (same pattern as Leads.jsx). No further action required for functionality.",
+    "Optional: consider seeding role-based test users (e.g. one sales_agent) so admins can validate RBAC without manual invite."
+  ],
+  "critical_code_review_comments": [
+    "Projects.jsx and Builders.jsx were missing `const [editing, setEditing] = useState(null)` — a regression caught only at render time. Adding an ESLint rule (no-undef) or pre-commit lint in /app/frontend would have caught this. Tester fixed both files.",
+    "PATCH endpoints for builders/projects/site-visits/inventory accept raw `dict` payload — bypasses Pydantic validation. Recommend defining BuilderUpdate/ProjectUpdate Pydantic models with `extra='ignore'` for type safety, similar to LeadUpdate.",
+    "/api/public/leads is public and rate-limit-free — could be spammed. Recommend adding basic IP-based rate-limiting (e.g. slowapi) before production.",
+    "Seed_data creates demo data only if `db.builders.count_documents({}) == 0` — that ignores partial seed states. Consider per-collection idempotent seed checks.",
+    "server.py is now 929 lines and growing — recommend splitting into modular routers (auth.py, leads.py, projects.py, users.py) before next iteration."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Projects.jsx (added missing useState for editing)",
+    "/app/frontend/src/pages/Builders.jsx (added missing useState for editing)",
+    "/app/backend/tests/test_devam_iter2.py (new pytest file, 16 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16)",
+    "frontend": "100% after fix (login, leads drawer, activity add, lead edit, inventory bulk modal, users CRUD + RBAC, project edit/share, builder edit, public capture form + thank-you state)"
+  },
+  "test_credentials": "admin@devam.com / Admin@123 (seeded)",
+  "seed_data_creation": "Backend tests left a few TEST_ prefixed leads/projects/users in DB. They use TEST_ prefix per guidelines. Not critical for production.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 complete. All 5 features (edit-in-place, lead activity drawer, bulk inventory, users RBAC, public capture page) verified end-to-end. Found & fixed missing useState bug in Projects/Builders. Public capture page accessible at /capture/{project_id}. Use http://<frontend>/capture/<project_id> to test. For new test users, use admin to invite via /app/users.",
+  "rca of the issue": "Issue: /app/projects and /app/builders pages threw 'ReferenceError: editing is not defined' as soon as page rendered, breaking the entire iteration-2 edit-in-place feature in the UI. Reproduction: login → navigate to /app/projects → React error overlay appears with 'editing is not defined'. RCA: Projects.jsx & Builders.jsx referenced `editing`/`setEditing` in 4 places each (Edit button, Add-new button, Form open prop, Form close handler) without declaring the state hook. Mitigation: Added `const [editing, setEditing] = useState(null);` near the other useState calls in both files. Verified by reloading both pages — edit buttons render, clicking opens prefilled form modal, project-share button works."
+}

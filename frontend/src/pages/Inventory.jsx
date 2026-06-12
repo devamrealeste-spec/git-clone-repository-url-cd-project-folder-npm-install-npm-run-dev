@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { Boxes, X } from "lucide-react";
 
 const STATUSES = ["Available", "Blocked", "Booked", "Sold"];
 
@@ -23,6 +24,7 @@ export default function Inventory() {
   const [projectId, setProjectId] = useState("");
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showBulk, setShowBulk] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -85,9 +87,19 @@ export default function Inventory() {
           <h1 className="font-display text-4xl font-medium mt-2 leading-none">Live Inventory</h1>
           <p className="text-[#5C5A55] mt-2 text-sm">Click any unit to cycle through Available → Blocked → Booked → Sold.</p>
         </div>
-        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="bg-white border border-[#E6E4DF] px-3 py-2.5 text-sm focus:outline-none focus:border-[#C25934]" data-testid="inventory-project-select">
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="bg-white border border-[#E6E4DF] px-3 py-2.5 text-sm focus:outline-none focus:border-[#C25934]" data-testid="inventory-project-select">
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button
+            onClick={() => setShowBulk(true)}
+            disabled={!projectId}
+            className="inline-flex items-center gap-2 bg-[#C25934] hover:bg-[#A64A2A] text-white px-4 py-2.5 text-sm font-medium disabled:opacity-60"
+            data-testid="inventory-bulk-button"
+          >
+            <Boxes className="w-4 h-4" strokeWidth={1.5} /> Bulk generate
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -145,6 +157,108 @@ export default function Inventory() {
             </div>
           </div>
         ))}
+      </div>
+
+      {showBulk && (
+        <BulkInventoryForm
+          projectId={projectId}
+          projectName={currentProject?.name}
+          onClose={() => setShowBulk(false)}
+          onCreated={(count) => {
+            setShowBulk(false);
+            toast.success(`${count} units generated`);
+            // refresh
+            api.get("/inventory", { params: { project_id: projectId } }).then((r) => setUnits(r.data));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkInventoryForm({ projectId, projectName, onClose, onCreated }) {
+  const [form, setForm] = useState({
+    towers: "A,B",
+    floors_per_tower: 10,
+    units_per_floor: 4,
+    unit_type: "2BHK",
+    carpet_area: 1200,
+    price: 8000000,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const totalUnits = (form.towers.split(",").filter(Boolean).length) * Number(form.floors_per_tower) * Number(form.units_per_floor);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const payload = {
+        project_id: projectId,
+        towers: form.towers.split(",").map((t) => t.trim()).filter(Boolean),
+        floors_per_tower: parseInt(form.floors_per_tower) || 1,
+        units_per_floor: parseInt(form.units_per_floor) || 1,
+        unit_type: form.unit_type,
+        carpet_area: parseFloat(form.carpet_area) || 0,
+        price: parseFloat(form.price) || 0,
+      };
+      const { data } = await api.post("/inventory/bulk", payload);
+      onCreated(data.created);
+    } catch {
+      toast.error("Could not generate inventory");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputCls = "w-full bg-white border border-[#E6E4DF] px-3 py-2.5 text-sm focus:outline-none focus:border-[#C25934]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A1A]/40 backdrop-blur-sm p-4">
+      <div className="bg-[#F9F6F0] border border-[#E6E4DF] w-full max-w-xl" data-testid="bulk-inventory-modal">
+        <div className="px-6 py-4 border-b border-[#E6E4DF] flex items-center justify-between">
+          <div>
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782]">/ Bulk inventory</div>
+            <div className="font-display text-2xl mt-1">Generate units in {projectName}</div>
+          </div>
+          <button onClick={onClose} className="p-2"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={submit} className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="block sm:col-span-2">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Towers (comma separated)</div>
+            <input value={form.towers} onChange={(e) => set("towers", e.target.value)} className={inputCls} placeholder="A,B,C" data-testid="bulk-towers" />
+          </label>
+          <label className="block">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Floors per tower</div>
+            <input type="number" min="1" value={form.floors_per_tower} onChange={(e) => set("floors_per_tower", e.target.value)} className={inputCls} data-testid="bulk-floors" />
+          </label>
+          <label className="block">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Units per floor</div>
+            <input type="number" min="1" value={form.units_per_floor} onChange={(e) => set("units_per_floor", e.target.value)} className={inputCls} data-testid="bulk-units-per-floor" />
+          </label>
+          <label className="block">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Unit type</div>
+            <input value={form.unit_type} onChange={(e) => set("unit_type", e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Carpet area (sqft)</div>
+            <input type="number" value={form.carpet_area} onChange={(e) => set("carpet_area", e.target.value)} className={inputCls} />
+          </label>
+          <label className="block sm:col-span-2">
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782] mb-1.5">Price per unit (₹)</div>
+            <input type="number" value={form.price} onChange={(e) => set("price", e.target.value)} className={inputCls} />
+          </label>
+          <div className="sm:col-span-2 text-sm bg-[#C25934]/10 border border-[#C25934]/30 px-4 py-3">
+            Will generate <span className="kpi-num text-lg text-[#C25934]">{totalUnits}</span> units — all marked Available.
+          </div>
+          <div className="sm:col-span-2 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm border border-[#E6E4DF]">Cancel</button>
+            <button type="submit" disabled={submitting} className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white disabled:opacity-60" data-testid="bulk-submit">
+              {submitting ? "Generating…" : `Generate ${totalUnits} units`}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

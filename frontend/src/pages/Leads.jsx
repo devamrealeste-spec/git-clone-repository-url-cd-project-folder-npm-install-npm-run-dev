@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Plus, RefreshCw, X, Sparkles, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, X, Sparkles, Trash2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
+import LeadDetailDrawer from "@/components/LeadDetailDrawer";
 
 const STAGES = ["New", "Contacted", "Site Visit", "Negotiation", "Booked", "Lost"];
 const SOURCES = ["Website", "Walk-in", "Referral", "Facebook", "Instagram", "99acres", "Magicbricks", "NRI Network"];
@@ -33,10 +34,11 @@ function ScoreBadge({ category, score }) {
 export default function Leads() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null); // null | "new" | lead object
   const [stageFilter, setStageFilter] = useState("");
   const [search, setSearch] = useState("");
   const [scoringId, setScoringId] = useState(null);
+  const [drawerLead, setDrawerLead] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -75,7 +77,8 @@ export default function Leads() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, e) => {
+    e?.stopPropagation();
     if (!confirm("Delete this lead?")) return;
     await api.delete(`/leads/${id}`);
     setLeads((prev) => prev.filter((l) => l.id !== id));
@@ -88,10 +91,10 @@ export default function Leads() {
         <div>
           <div className="text-xxs uppercase tracking-[0.2em] text-[#8A8782]">/ Leads</div>
           <h1 className="font-display text-4xl font-medium mt-2 leading-none">Lead Intelligence</h1>
-          <p className="text-[#5C5A55] mt-2 text-sm">AI-scored. Sorted by urgency. Never miss a hot inquiry.</p>
+          <p className="text-[#5C5A55] mt-2 text-sm">AI-scored. Sorted by urgency. Tap any row to log activity.</p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => setEditing("new")}
           data-testid="add-lead-button"
           className="inline-flex items-center gap-2 bg-[#C25934] hover:bg-[#A64A2A] text-white px-5 py-2.5 text-sm font-medium transition-colors"
         >
@@ -99,7 +102,6 @@ export default function Leads() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={search}
@@ -122,7 +124,6 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white border border-[#E6E4DF] overflow-x-auto">
         <table className="w-full text-left min-w-[1000px]">
           <thead>
@@ -138,20 +139,17 @@ export default function Leads() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={8} className="py-10 text-center text-sm text-[#8A8782]">Loading…</td>
-              </tr>
-            )}
-            {!loading && leads.length === 0 && (
-              <tr>
-                <td colSpan={8} className="py-10 text-center text-sm text-[#8A8782]">No leads found.</td>
-              </tr>
-            )}
+            {loading && (<tr><td colSpan={8} className="py-10 text-center text-sm text-[#8A8782]">Loading…</td></tr>)}
+            {!loading && leads.length === 0 && (<tr><td colSpan={8} className="py-10 text-center text-sm text-[#8A8782]">No leads found.</td></tr>)}
             {leads.map((l) => (
-              <tr key={l.id} className="border-b border-[#E6E4DF] last:border-0 hover:bg-[#F4F3EE]/50" data-testid={`lead-row-${l.id}`}>
+              <tr
+                key={l.id}
+                onClick={() => setDrawerLead(l)}
+                className="border-b border-[#E6E4DF] last:border-0 hover:bg-[#F4F3EE]/50 cursor-pointer"
+                data-testid={`lead-row-${l.id}`}
+              >
                 <td className="py-4 px-5">
-                  <div className="text-sm font-medium">{l.name}</div>
+                  <div className="text-sm font-medium hover:text-[#C25934]">{l.name}</div>
                   <div className="text-xs text-[#8A8782]">{l.phone}</div>
                   {l.email && <div className="text-xs text-[#8A8782]">{l.email}</div>}
                 </td>
@@ -162,7 +160,7 @@ export default function Leads() {
                 </td>
                 <td className="py-4 px-5 text-sm font-mono">{fmtINR(l.budget_min)} – {fmtINR(l.budget_max)}</td>
                 <td className="py-4 px-5 text-sm">{l.urgency}</td>
-                <td className="py-4 px-5">
+                <td className="py-4 px-5" onClick={(e) => e.stopPropagation()}>
                   <select
                     value={l.stage}
                     onChange={(e) => handleStageChange(l.id, e.target.value)}
@@ -176,23 +174,15 @@ export default function Leads() {
                   <ScoreBadge category={l.score_category} score={l.score} />
                   {l.score_reason && <div className="text-[10px] text-[#8A8782] mt-1 max-w-[180px] truncate" title={l.score_reason}>{l.score_reason}</div>}
                 </td>
-                <td className="py-4 px-5">
+                <td className="py-4 px-5" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1 justify-end">
-                    <button
-                      onClick={() => handleRescore(l.id)}
-                      disabled={scoringId === l.id}
-                      title="Re-score with AI"
-                      className="p-1.5 text-[#5C5A55] hover:text-[#C25934] disabled:opacity-50"
-                      data-testid={`lead-rescore-${l.id}`}
-                    >
+                    <button onClick={() => setEditing(l)} title="Edit" className="p-1.5 text-[#5C5A55] hover:text-[#C25934]" data-testid={`lead-edit-${l.id}`}>
+                      <Edit2 className="w-4 h-4" strokeWidth={1.5} />
+                    </button>
+                    <button onClick={() => handleRescore(l.id)} disabled={scoringId === l.id} title="Re-score with AI" className="p-1.5 text-[#5C5A55] hover:text-[#C25934] disabled:opacity-50" data-testid={`lead-rescore-${l.id}`}>
                       {scoringId === l.id ? <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.5} /> : <Sparkles className="w-4 h-4" strokeWidth={1.5} />}
                     </button>
-                    <button
-                      onClick={() => handleDelete(l.id)}
-                      title="Delete"
-                      className="p-1.5 text-[#5C5A55] hover:text-[#D9423E]"
-                      data-testid={`lead-delete-${l.id}`}
-                    >
+                    <button onClick={(e) => handleDelete(l.id, e)} title="Delete" className="p-1.5 text-[#5C5A55] hover:text-[#D9423E]" data-testid={`lead-delete-${l.id}`}>
                       <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                     </button>
                   </div>
@@ -203,13 +193,26 @@ export default function Leads() {
         </table>
       </div>
 
-      {showForm && (
+      {editing && (
         <LeadForm
-          onClose={() => setShowForm(false)}
-          onCreated={(lead) => {
-            setLeads((prev) => [lead, ...prev]);
-            setShowForm(false);
-            toast.success(`Lead added · scored ${lead.score_category} (${lead.score})`);
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={(lead, isNew) => {
+            if (isNew) setLeads((prev) => [lead, ...prev]);
+            else setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)));
+            setEditing(null);
+            toast.success(isNew ? `Lead added · scored ${lead.score_category} (${lead.score})` : "Lead updated");
+          }}
+        />
+      )}
+
+      {drawerLead && (
+        <LeadDetailDrawer
+          lead={drawerLead}
+          onClose={() => setDrawerLead(null)}
+          onLeadUpdated={(updated) => {
+            setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+            setDrawerLead(updated);
           }}
         />
       )}
@@ -232,22 +235,22 @@ function FilterChip({ active, onClick, children }) {
   );
 }
 
-function LeadForm({ onClose, onCreated }) {
+function LeadForm({ initial, onClose, onSaved }) {
+  const isEdit = !!initial;
   const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    source: "Website",
-    budget_min: "",
-    budget_max: "",
-    location: "",
-    property_type: "Apartment",
-    urgency: "1-3 months",
-    notes: "",
-    stage: "New",
+    name: initial?.name || "",
+    phone: initial?.phone || "",
+    email: initial?.email || "",
+    source: initial?.source || "Website",
+    budget_min: initial?.budget_min ?? "",
+    budget_max: initial?.budget_max ?? "",
+    location: initial?.location || "",
+    property_type: initial?.property_type || "Apartment",
+    urgency: initial?.urgency || "1-3 months",
+    notes: initial?.notes || "",
+    stage: initial?.stage || "New",
   });
   const [submitting, setSubmitting] = useState(false);
-
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
@@ -259,9 +262,14 @@ function LeadForm({ onClose, onCreated }) {
         budget_min: parseFloat(form.budget_min) || 0,
         budget_max: parseFloat(form.budget_max) || 0,
       };
-      const { data } = await api.post("/leads", payload);
-      onCreated(data);
-    } catch (err) {
+      if (isEdit) {
+        const { data } = await api.patch(`/leads/${initial.id}`, payload);
+        onSaved(data, false);
+      } else {
+        const { data } = await api.post("/leads", payload);
+        onSaved(data, true);
+      }
+    } catch {
       toast.error("Could not save lead");
     } finally {
       setSubmitting(false);
@@ -273,8 +281,8 @@ function LeadForm({ onClose, onCreated }) {
       <div className="bg-[#F9F6F0] border border-[#E6E4DF] w-full max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="lead-form-modal">
         <div className="px-6 py-4 border-b border-[#E6E4DF] flex items-center justify-between">
           <div>
-            <div className="text-xxs uppercase tracking-widest text-[#8A8782]">/ New lead</div>
-            <div className="font-display text-2xl mt-1">Capture inquiry</div>
+            <div className="text-xxs uppercase tracking-widest text-[#8A8782]">/ {isEdit ? "Edit lead" : "New lead"}</div>
+            <div className="font-display text-2xl mt-1">{isEdit ? form.name : "Capture inquiry"}</div>
           </div>
           <button onClick={onClose} className="p-2 text-[#5C5A55] hover:text-[#1A1A1A]" data-testid="lead-form-close">
             <X className="w-5 h-5" />
@@ -317,6 +325,13 @@ function LeadForm({ onClose, onCreated }) {
           <Field label="Notes" className="sm:col-span-2">
             <textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inputCls} />
           </Field>
+          {isEdit && (
+            <Field label="Stage">
+              <select value={form.stage} onChange={(e) => set("stage", e.target.value)} className={inputCls}>
+                {STAGES.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+          )}
           <div className="sm:col-span-2 flex justify-end gap-3 mt-2">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm border border-[#E6E4DF] hover:border-[#1A1A1A] transition-colors">
               Cancel
@@ -327,8 +342,8 @@ function LeadForm({ onClose, onCreated }) {
               data-testid="lead-form-submit"
               className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white inline-flex items-center gap-2 disabled:opacity-60 transition-colors"
             >
-              <Sparkles className="w-4 h-4" strokeWidth={1.5} />
-              {submitting ? "Scoring with AI…" : "Save & score"}
+              {!isEdit && <Sparkles className="w-4 h-4" strokeWidth={1.5} />}
+              {submitting ? (isEdit ? "Saving…" : "Scoring with AI…") : (isEdit ? "Save changes" : "Save & score")}
             </button>
           </div>
         </form>

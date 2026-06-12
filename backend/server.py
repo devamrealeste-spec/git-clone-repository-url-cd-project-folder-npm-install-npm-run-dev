@@ -286,7 +286,7 @@ async def score_lead_with_ai(lead: dict) -> dict:
                 "SCORE=<int>|CATEGORY=<Hot|Warm|Cold>|REASON=<short reason in 12 words>. "
                 "Hot >= 75, Warm 40-74, Cold < 40. Consider budget realism, urgency, source quality, completeness, and clarity of intent."
             ),
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929").with_max_tokens(200)
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
 
         prompt = (
             f"Lead Name: {lead.get('name')}\n"
@@ -398,7 +398,90 @@ async def delete_lead(lead_id: str, _=Depends(get_current_user)):
     res = await db.leads.delete_one({"id": lead_id})
     if res.deleted_count == 0:
         raise HTTPException(404, "Lead not found")
+    await db.lead_activities.delete_many({"lead_id": lead_id})
     return {"ok": True}
+
+
+# ---------- Lead Activities (Timeline) ----------
+class ActivityIn(BaseModel):
+    type: Literal["Note", "Call", "WhatsApp", "Email", "Meeting", "Status Change"] = "Note"
+    content: str
+
+
+@api.get("/leads/{lead_id}/activities")
+async def list_activities(lead_id: str, _=Depends(get_current_user)):
+    items = await db.lead_activities.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+
+@api.post("/leads/{lead_id}/activities")
+async def add_activity(lead_id: str, data: ActivityIn, current=Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "lead_id": lead_id,
+        "type": data.type,
+        "content": data.content,
+        "created_at": now_utc().isoformat(),
+        "created_by_id": current["id"],
+        "created_by_name": current.get("name", "User"),
+    }
+    await db.lead_activities.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/leads/{lead_id}/activities/{aid}")
+async def delete_activity(lead_id: str, aid: str, _=Depends(get_current_user)):
+    await db.lead_activities.delete_one({"id": aid, "lead_id": lead_id})
+    return {"ok": True}
+
+
+# ---------- Public Lead Capture (no auth) ----------
+class PublicLeadIn(BaseModel):
+    name: str
+    phone: str
+    email: Optional[str] = None
+    budget_min: float = 0
+    budget_max: float = 0
+    property_type: Optional[str] = "Apartment"
+    urgency: Optional[str] = "1-3 months"
+    notes: Optional[str] = ""
+    project_id: Optional[str] = None
+    source: str = "Website"
+
+
+@api.post("/public/leads")
+async def public_create_lead(data: PublicLeadIn):
+    """Public endpoint — embeddable on Instagram bios, WhatsApp, project micro-sites."""
+    lead = {
+        "id": str(uuid.uuid4()),
+        "name": data.name.strip(),
+        "phone": data.phone.strip(),
+        "email": (data.email or "").strip() or None,
+        "source": data.source or "Website",
+        "budget_min": data.budget_min or 0,
+        "budget_max": data.budget_max or 0,
+        "location": "",
+        "property_type": data.property_type or "Apartment",
+        "urgency": data.urgency or "1-3 months",
+        "notes": data.notes or "",
+        "assigned_to": None,
+        "project_id": data.project_id,
+        "stage": "New",
+        "created_at": now_utc().isoformat(),
+    }
+    lead["updated_at"] = lead["created_at"]
+    ai = await score_lead_with_ai(lead)
+    lead.update({"score": ai["score"], "score_category": ai["category"], "score_reason": ai["reason"]})
+    await db.leads.insert_one(lead)
+    return {
+        "ok": True,
+        "score_category": lead["score_category"],
+        "message": "Thanks! Our sales team will reach out shortly.",
+    }
 
 
 # ---------- Builders ----------
@@ -415,6 +498,16 @@ async def create_builder(data: BuilderIn, _=Depends(get_current_user)):
     await db.builders.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@api.patch("/builders/{bid}")
+async def update_builder(bid: str, payload: dict, _=Depends(get_current_user)):
+    payload = {k: v for k, v in payload.items() if v is not None and k not in ("id", "_id", "created_at")}
+    payload["updated_at"] = now_utc().isoformat()
+    res = await db.builders.update_one({"id": bid}, {"$set": payload})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Builder not found")
+    return await db.builders.find_one({"id": bid}, {"_id": 0})
 
 
 @api.delete("/builders/{bid}")
@@ -437,6 +530,25 @@ async def create_project(data: ProjectIn, _=Depends(get_current_user)):
     await db.projects.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@api.patch("/projects/{pid}")
+async def update_project(pid: str, payload: dict, _=Depends(get_current_user)):
+    payload = {k: v for k, v in payload.items() if v is not None and k not in ("id", "_id", "created_at")}
+    payload["updated_at"] = now_utc().isoformat()
+    res = await db.projects.update_one({"id": pid}, {"$set": payload})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Project not found")
+    return await db.projects.find_one({"id": pid}, {"_id": 0})
+
+
+@api.get("/projects/{pid}")
+async def get_project(pid: str):
+    """Public — used by the embeddable lead-capture micro-site."""
+    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Project not found")
+    return p
 
 
 @api.delete("/projects/{pid}")
@@ -519,6 +631,43 @@ async def create_inventory(data: InventoryUnitIn, _=Depends(get_current_user)):
     return doc
 
 
+class BulkInventoryIn(BaseModel):
+    project_id: str
+    towers: List[str] = Field(default_factory=lambda: ["A"])
+    floors_per_tower: int = 5
+    units_per_floor: int = 4
+    unit_type: str = "2BHK"
+    carpet_area: float = 1200
+    price: float = 8000000
+
+
+@api.post("/inventory/bulk")
+async def bulk_inventory(data: BulkInventoryIn, _=Depends(get_current_user)):
+    proj = await db.projects.find_one({"id": data.project_id}, {"_id": 0})
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    docs = []
+    for t in data.towers:
+        for f in range(1, data.floors_per_tower + 1):
+            for u in range(1, data.units_per_floor + 1):
+                docs.append({
+                    "id": str(uuid.uuid4()),
+                    "project_id": data.project_id,
+                    "project_name": proj["name"],
+                    "tower": t.upper(),
+                    "floor": f,
+                    "unit_number": f"{t.upper()}-{f}0{u}",
+                    "unit_type": data.unit_type,
+                    "carpet_area": data.carpet_area,
+                    "price": data.price,
+                    "status": "Available",
+                    "created_at": now_utc().isoformat(),
+                })
+    if docs:
+        await db.inventory.insert_many(docs)
+    return {"created": len(docs)}
+
+
 @api.patch("/inventory/{uid}")
 async def update_inventory(uid: str, payload: dict, _=Depends(get_current_user)):
     payload = {k: v for k, v in payload.items() if v is not None}
@@ -529,6 +678,86 @@ async def update_inventory(uid: str, payload: dict, _=Depends(get_current_user))
 @api.delete("/inventory/{uid}")
 async def delete_inventory(uid: str, _=Depends(get_current_user)):
     await db.inventory.delete_one({"id": uid})
+    return {"ok": True}
+
+
+# ---------- User Management (admin only) ----------
+ROLES = ["admin", "sales_manager", "sales_agent", "builder_partner", "viewer"]
+
+
+def require_admin(current: dict = Depends(get_current_user)):
+    if current.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    role: Literal["admin", "sales_manager", "sales_agent", "builder_partner", "viewer"] = "sales_agent"
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
+
+
+@api.get("/users")
+async def list_users(_=Depends(require_admin)):
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1).to_list(500)
+    return users
+
+
+@api.post("/users")
+async def create_user(data: UserCreate, _=Depends(require_admin)):
+    email = data.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already in use")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "name": data.name.strip(),
+        "role": data.role,
+        "password_hash": hash_password(data.password),
+        "created_at": now_utc().isoformat(),
+    }
+    await db.users.insert_one(doc)
+    doc.pop("_id", None)
+    doc.pop("password_hash", None)
+    return doc
+
+
+@api.patch("/users/{uid}")
+async def update_user(uid: str, data: UserUpdate, current=Depends(require_admin)):
+    update = {}
+    if data.name is not None:
+        update["name"] = data.name.strip()
+    if data.role is not None:
+        if data.role not in ROLES:
+            raise HTTPException(400, "Invalid role")
+        update["role"] = data.role
+    if data.password:
+        update["password_hash"] = hash_password(data.password)
+    if not update:
+        raise HTTPException(400, "No fields to update")
+    res = await db.users.update_one({"id": uid}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(404, "User not found")
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@api.delete("/users/{uid}")
+async def delete_user(uid: str, current=Depends(require_admin)):
+    if uid == current["id"]:
+        raise HTTPException(400, "You cannot delete your own account")
+    user = await db.users.find_one({"id": uid})
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.get("email") == os.environ.get("ADMIN_EMAIL", "").lower():
+        raise HTTPException(400, "Cannot delete the seeded admin account")
+    await db.users.delete_one({"id": uid})
     return {"ok": True}
 
 

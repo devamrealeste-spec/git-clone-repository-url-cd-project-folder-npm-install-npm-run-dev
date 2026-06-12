@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Plus, X, Trash2, MapPin } from "lucide-react";
+import { Plus, X, Trash2, MapPin, Edit2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUSES = ["Pre-launch", "Under Construction", "Ready to Move", "Sold Out"];
@@ -20,6 +20,7 @@ export default function Projects() {
   const [builders, setBuilders] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
 
   const load = async () => {
     const [p, b] = await Promise.all([api.get("/projects"), api.get("/builders")]);
@@ -52,7 +53,7 @@ export default function Projects() {
           <p className="text-[#5C5A55] mt-2 text-sm">Every tower, every floor, every flat — under one roof.</p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => setEditing("new")}
           className="inline-flex items-center gap-2 bg-[#C25934] hover:bg-[#A64A2A] text-white px-5 py-2.5 text-sm font-medium"
           data-testid="add-project-button"
         >
@@ -98,9 +99,25 @@ export default function Projects() {
                 </div>
               </div>
               {p.rera_number && <div className="text-[10px] text-[#8A8782] mt-3 font-mono">RERA · {p.rera_number}</div>}
-              <button onClick={() => handleDelete(p.id)} className="text-xs text-[#5C5A55] hover:text-[#D9423E] mt-3 inline-flex items-center gap-1" data-testid={`project-delete-${p.id}`}>
-                <Trash2 className="w-3 h-3" /> Remove
-              </button>
+              <div className="flex items-center gap-3 mt-3">
+                <button onClick={() => setEditing(p)} className="text-xs text-[#5C5A55] hover:text-[#C25934] inline-flex items-center gap-1" data-testid={`project-edit-${p.id}`}>
+                  <Edit2 className="w-3 h-3" /> Edit
+                </button>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/capture/${p.id}`;
+                    navigator.clipboard?.writeText(url);
+                    toast.success("Public lead form link copied");
+                  }}
+                  className="text-xs text-[#5C5A55] hover:text-[#C25934] inline-flex items-center gap-1"
+                  data-testid={`project-share-${p.id}`}
+                >
+                  <Share2 className="w-3 h-3" /> Share form
+                </button>
+                <button onClick={() => handleDelete(p.id)} className="text-xs text-[#5C5A55] hover:text-[#D9423E] inline-flex items-center gap-1 ml-auto" data-testid={`project-delete-${p.id}`}>
+                  <Trash2 className="w-3 h-3" /> Remove
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -112,14 +129,16 @@ export default function Projects() {
         </div>
       )}
 
-      {showForm && (
+      {editing && (
         <ProjectForm
+          initial={editing === "new" ? null : editing}
           builders={builders}
-          onClose={() => setShowForm(false)}
-          onCreated={(p) => {
-            setProjects((prev) => [p, ...prev]);
-            setShowForm(false);
-            toast.success("Project added");
+          onClose={() => setEditing(null)}
+          onSaved={(p, isNew) => {
+            if (isNew) setProjects((prev) => [p, ...prev]);
+            else setProjects((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+            setEditing(null);
+            toast.success(isNew ? "Project added" : "Project updated");
           }}
         />
       )}
@@ -127,12 +146,24 @@ export default function Projects() {
   );
 }
 
-function ProjectForm({ builders, onClose, onCreated }) {
+function ProjectForm({ initial, builders, onClose, onSaved }) {
+  const isEdit = !!initial;
   const [form, setForm] = useState({
-    name: "", builder_id: "", builder_name: "",
-    city: "Gandhinagar", location: "", project_type: "Residential", status: "Under Construction",
-    price_min: "", price_max: "", total_units: "", available_units: "",
-    rera_number: "", possession_date: "", description: "", image_url: "",
+    name: initial?.name || "",
+    builder_id: initial?.builder_id || "",
+    builder_name: initial?.builder_name || "",
+    city: initial?.city || "Gandhinagar",
+    location: initial?.location || "",
+    project_type: initial?.project_type || "Residential",
+    status: initial?.status || "Under Construction",
+    price_min: initial?.price_min ?? "",
+    price_max: initial?.price_max ?? "",
+    total_units: initial?.total_units ?? "",
+    available_units: initial?.available_units ?? "",
+    rera_number: initial?.rera_number || "",
+    possession_date: initial?.possession_date || "",
+    description: initial?.description || "",
+    image_url: initial?.image_url || "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -148,8 +179,13 @@ function ProjectForm({ builders, onClose, onCreated }) {
       };
       const b = builders.find((x) => x.id === payload.builder_id);
       if (b) payload.builder_name = b.name;
-      const { data } = await api.post("/projects", payload);
-      onCreated(data);
+      if (isEdit) {
+        const { data } = await api.patch(`/projects/${initial.id}`, payload);
+        onSaved(data, false);
+      } else {
+        const { data } = await api.post("/projects", payload);
+        onSaved(data, true);
+      }
     } catch {
       toast.error("Could not save");
     }
@@ -211,7 +247,7 @@ function ProjectForm({ builders, onClose, onCreated }) {
           </Field>
           <div className="sm:col-span-2 flex justify-end gap-3 mt-2">
             <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm border border-[#E6E4DF]">Cancel</button>
-            <button type="submit" className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white" data-testid="project-form-submit">Save project</button>
+            <button type="submit" className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white" data-testid="project-form-submit">{isEdit ? "Save changes" : "Save project"}</button>
           </div>
         </form>
       </div>
