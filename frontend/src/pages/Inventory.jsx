@@ -25,10 +25,18 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/projects").then((r) => {
+    (async () => {
+      const r = await api.get("/projects");
       setProjects(r.data);
-      if (r.data[0]) setProjectId(r.data[0].id);
-    });
+      if (!r.data.length) return;
+      // Default to the first project that actually has inventory; fall back to the first project.
+      let chosen = r.data[0].id;
+      for (const p of r.data) {
+        const inv = await api.get("/inventory", { params: { project_id: p.id } });
+        if (inv.data.length > 0) { chosen = p.id; break; }
+      }
+      setProjectId(chosen);
+    })();
   }, []);
 
   useEffect(() => {
