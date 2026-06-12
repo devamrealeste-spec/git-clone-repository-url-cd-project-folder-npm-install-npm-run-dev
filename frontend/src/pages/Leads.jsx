@@ -342,7 +342,7 @@ function LeadForm({ initial, onClose, onSaved }) {
               className="px-5 py-2.5 text-sm bg-[#C25934] hover:bg-[#A64A2A] text-white inline-flex items-center gap-2 disabled:opacity-60 transition-colors"
             >
               {!isEdit && <Sparkles className="w-4 h-4" strokeWidth={1.5} />}
-              {submitting ? (isEdit ? "Saving…" : "Scoring with AI…") : (isEdit ? "Save changes" : "Save & score")}
+              {submitButtonLabel(isEdit, submitting)}
             </button>
           </div>
         </form>
@@ -353,6 +353,11 @@ function LeadForm({ initial, onClose, onSaved }) {
 
 const inputCls =
   "w-full bg-white border border-[#E6E4DF] px-3 py-2.5 text-sm focus:outline-none focus:border-[#C25934] focus:ring-1 focus:ring-[#C25934]";
+
+function submitButtonLabel(isEdit, submitting) {
+  if (!submitting) return isEdit ? "Save changes" : "Save & score";
+  return isEdit ? "Saving…" : "Scoring with AI…";
+}
 
 function Field({ label, required, children, className = "" }) {
   return (
